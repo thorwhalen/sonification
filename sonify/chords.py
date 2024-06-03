@@ -6,7 +6,12 @@ from typing import Sequence, Tuple, Callable, Mapping, Dict
 import os
 import re
 from config2py import process_path
-from sonify.util import get_config
+from sonify.util import (
+    DFLT_OUTPUT_NAME,
+    DFLT_MIDI_OUTPUT,
+    DFLT_SOUNDFONT,
+)
+
 
 Note = int
 Notes = Sequence[Note]
@@ -17,12 +22,6 @@ ChordSequence = Sequence[ChordTimed]
 ChordDefinitions = Callable[[Chord], Notes]
 ChordRenderer = Callable[[Notes, MidiTrack, int], None]
 
-DFLT_OUTPUT_NAME = 'audio_output'
-DFLT_MIDI_OUTPUT = f"{DFLT_OUTPUT_NAME}.mid"
-DFLT_WAV_OUTPUT = f"{DFLT_OUTPUT_NAME}.wav"
-DFLT_SOUNDFONT = process_path(
-    get_config('SONIFY_DFLT_SOUNDFONT_PATH'),
-)
 
 DFLT_CHORD_SEQUENCE = [
     ('Bdim', 120),
@@ -32,7 +31,6 @@ DFLT_CHORD_SEQUENCE = [
     'G7',
     'Cmaj7',
 ]
-
 
 
 # Define root notes to MIDI note numbers
@@ -226,23 +224,6 @@ def chords_to_midi(
     midi.save(output_file)
 
 
-def midi_to_wav(
-    midi_file: str = DFLT_MIDI_OUTPUT,
-    soundfont: str = DFLT_SOUNDFONT,
-    output_wav: str = DFLT_WAV_OUTPUT,
-):
-    """
-    Synthesize audio from a MIDI file using FluidSynth.
-
-    :param midi_file: Name of the input MIDI file.
-    :param soundfont: Path to the SoundFont file.
-    :param output_wav: Name of the output WAV file.
-    """
-    subprocess.run(
-        ['fluidsynth', '-ni', soundfont, midi_file, '-F', output_wav, '-r', '44100']
-    )
-
-
 def chords_to_wav(
     chord_sequence: ChordSequence = DFLT_CHORD_SEQUENCE,
     name: str = DFLT_OUTPUT_NAME,
@@ -260,6 +241,8 @@ def chords_to_wav(
     :param soundfont: Path to the SoundFont file.
     :param render_chord: Function defining how the chords should be played.
     """
+    from sonify.converters import midi_to_wav
+
     midi_file = f'{name}.mid'
     wav_file = f'{name}.wav'
 
@@ -269,5 +252,5 @@ def chords_to_wav(
         output_file=midi_file,
         render_chord=render_chord,
     )
-    midi_to_wav(midi_file=midi_file, soundfont=soundfont, output_wav=wav_file)
+    midi_to_wav(midi_file=midi_file, output_wav=wav_file, soundfont=soundfont)
     return wav_file
