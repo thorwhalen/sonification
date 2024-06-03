@@ -58,11 +58,12 @@ def convert(
 
     dest_format = format_of_filepath(dest)
 
-    print(locals())
+    # print(locals())
     if src_format == 'musicxml' and dest_format == 'midi':
         return musicxml_to_midi(src, dest)
     if src_format == 'midi' and dest_format == 'wav':
         return midi_to_wav(src, dest)
+    raise ValueError(f"Unsupported conversion: {src_format} -> {dest_format}")  
 
 
 def musicxml_to_midi(musicxml_path, midi_path=None):
