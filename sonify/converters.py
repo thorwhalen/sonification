@@ -9,6 +9,9 @@ dflt_format_for_extension = {
     '.xml': 'musicxml',
     '.musicxml': 'musicxml',
     '.wav': 'wav',
+    '.png': 'image',
+    '.jpg': 'image',
+    '.jpeg': 'image',
 }
 
 dflt_extension_for_format = {v: k for k, v in dflt_format_for_extension.items()}
@@ -63,7 +66,25 @@ def convert(
         return musicxml_to_midi(src, dest)
     if src_format == 'midi' and dest_format == 'wav':
         return midi_to_wav(src, dest)
-    raise ValueError(f"Unsupported conversion: {src_format} -> {dest_format}")  
+    if src_format == 'image' and dest_format == 'musicxml':
+        return image_to_musicxml(src)
+    raise ValueError(f"Unsupported conversion: {src_format} -> {dest_format}")
+
+
+def image_to_musicxml(
+    image: str, *, enable_debug=False, enable_cache=False, remove_teaser_file=True
+):
+    """Convert and image of a music score into a musicxml file."""
+    from homr.main import process_image
+
+    musicxml_filepath, _, teaser_filepath = process_image(
+        image, enable_debug=enable_debug, enable_cache=enable_cache
+    )
+
+    if remove_teaser_file:
+        os.remove(teaser_filepath)
+        
+    return musicxml_filepath
 
 
 def musicxml_to_midi(musicxml_path, midi_path=None):

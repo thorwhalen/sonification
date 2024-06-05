@@ -54,8 +54,11 @@ root_notes: Dict[str, int] = {
     'B': 71,
 }
 
+# TODO: Verify completeness and more chord definitions if needed
+# TODO: See if defs can be infered from parsing the chord names
 # Define quality and extension intervals
 quality_extensions: Dict[str, Sequence[int]] = {
+    '': [0, 4, 7],  # Major triad, 'C' -> 'Cmaj
     'maj': [0, 4, 7],  # Major triad
     'min': [0, 3, 7],  # Minor triad
     'dim': [0, 3, 6],  # Diminished triad
@@ -120,7 +123,7 @@ def chord_to_notes(chord: Chord) -> Notes:
     root = parse_root(chord)
     quality_extension = chord[len(root) :]
     root_midi = root_notes.get(root)
-    print(root, root_midi, quality_extension)
+    # print(root, root_midi, quality_extension)
 
     if root_midi is None:
         raise ValueError(f"Unknown root note: {root}")
@@ -150,21 +153,30 @@ def register_chord_render(chord_renderer: ChordRenderer, name=None):
 
 
 @register_chord_render
-def play_simultaneously(notes: Sequence[int], track: MidiTrack, duration: int):
+def play_simultaneously(
+    notes: Sequence[int], track: MidiTrack, duration: int, *, velocity=64
+):
+    v = velocity
     for note in notes:
-        track.append(Message('note_on', note=note, velocity=64, time=0))
-    for note in notes:
-        track.append(Message('note_off', note=note, velocity=64, time=duration))
+        track.append(Message('note_on', note=note, velocity=v, time=0))
+    _notes = iter(notes)
+    track.append(Message('note_off', note=next(_notes), velocity=v, time=duration))
+    for note in _notes:
+        track.append(Message('note_off', note=note, velocity=v, time=0))
 
 
+# TODO: Need a better implementation for arpeggios.
 @register_chord_render
-def play_arpeggio(notes: Sequence[int], track: MidiTrack, duration: int):
+def play_arpeggio(
+    notes: Sequence[int], track: MidiTrack, duration: int, *, velocity=64
+):
+    v = velocity
     note_duration = duration // len(notes)
     current_time = 0
     for note in notes:
-        track.append(Message('note_on', note=note, velocity=64, time=current_time))
+        track.append(Message('note_on', note=note, velocity=v, time=current_time))
         current_time += note_duration
-        track.append(Message('note_off', note=note, velocity=64, time=current_time))
+        track.append(Message('note_off', note=note, velocity=v, time=current_time))
 
 
 def resolve_chord_render(chord_renderer: ChordRenderer) -> ChordRenderer:
@@ -181,7 +193,12 @@ def resolve_chord_render(chord_renderer: ChordRenderer) -> ChordRenderer:
     return chord_renderer
 
 
-def process_chord_sequence(chord_sequence: ChordSequence, default_duration=240):
+DFLT_DURATION = 240 * 4
+
+
+def process_chord_sequence(
+    chord_sequence: ChordSequence, default_duration=DFLT_DURATION
+):
     """Preprocess a chord sequence, to make sure to add time, etc."""
     for chord in chord_sequence:
         if isinstance(chord, str):
@@ -221,7 +238,11 @@ def chords_to_midi(
         if pattern:
             render_chord(pattern, track, duration)
 
-    midi.save(output_file)
+    if output_file:
+        midi.save(output_file)
+        return output_file
+    else:
+        return midi
 
 
 def chords_to_wav(
