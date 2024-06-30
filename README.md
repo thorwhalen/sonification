@@ -5,49 +5,80 @@
 
 To install:	```pip install sonify```
 
-
 # Examples
 
-## chords
-
-
 ```python
-from sonify import chords_to_wav
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
+import simpleaudio as sa
 
-chord_sequence = [
-    ('Bdim', 120),
-    ('Em11', 120),
-    ('Amin9', 120),
-    ('Dm7', 120),
-    'G7',
-    'Cmaj7',
-]
+def preprocess_dataframe(df):
+    df = df.copy()
+    # Normalize numerical columns
+    scaler = MinMaxScaler()
+    for column in df.select_dtypes(include=np.number).columns:
+        df[column] = scaler.fit_transform(df[[column]])
+    
+    # Ensure durations are not zero
+    if 'duration' in df.columns:
+        df['duration'] = df['duration'] + 0.01  # Adding a small value to ensure durations are not zero
+    
+    # Encode categorical columns
+    label_encoders = {}
+    for column in df.select_dtypes(include='object').columns:
+        le = LabelEncoder()
+        df[column] = le.fit_transform(df[column])
+        label_encoders[column] = le
+    
+    return df, label_encoders
 
-wav_filepath = chords_to_wav(chord_sequence)
+def generate_tone(frequency, duration, volume, sample_rate=44100):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * np.sin(frequency * t * 2 * np.pi)
+    return wave
 
+def map_features_to_audio(df, pitch_col, duration_col, volume_col, sample_rate=44100):
+    waveform = np.array([])
+    
+    for index, row in df.iterrows():
+        pitch = row[pitch_col]
+        duration = row[duration_col]
+        volume = row[volume_col]
+        
+        frequency = 440 + pitch * 440  # Example: Map pitch to frequency
+        wave = generate_tone(frequency, duration, volume, sample_rate)
+        
+        # print(f"Row {index}: pitch={pitch}, duration={duration}, volume={volume}, frequency={frequency}, wave_len={len(wave)}")
+        
+        waveform = np.concatenate([waveform, wave])
+    
+    print(f"Final waveform length: {len(waveform)}")
+    return waveform, sample_rate
+
+def save_or_return_audio(waveform, sample_rate, filepath=None):
+    if filepath:
+        # Normalize waveform to int16 range
+        waveform_int16 = np.int16(waveform / np.max(np.abs(waveform)) * 32767)
+        sa.WaveObject(waveform_int16, 1, 2, sample_rate).save(filepath)
+    else:
+        return waveform, sample_rate
+
+def sonify_dataframe(df, pitch_col, duration_col, volume_col, sample_rate=44100, filepath=None):
+    df, label_encoders = preprocess_dataframe(df)
+    waveform, sr = map_features_to_audio(df, pitch_col, duration_col, volume_col, sample_rate)
+    return save_or_return_audio(waveform, sr, filepath)
+
+# Example usage:
+df = pd.DataFrame({
+    'pitch': [0.2, 0.4, 0.6, 0.8],
+    'duration': [0.5, 0.5, 0.5, 0.5],
+    'volume': [0.5, 0.7, 0.9, 1.0]
+})
+waveform, sr = sonify_dataframe(df, 'pitch', 'duration', 'volume')
+
+# To play the audio
+if waveform is not None and len(waveform) > 0:
+    play_obj = sa.play_buffer(np.int16(waveform / np.max(np.abs(waveform)) * 32767), 1, 2, sr)
+    play_obj.wait_done()
 ```
-
-If you have [hum](https://pypi.org/project/hum/) you can use it to diplay (and hear) 
-the sound:
-
-```python
-from hum import Sound
-Sound.from_file(wav_filepath).display()
-```
-
-![image](https://github.com/thorwhalen/sonify/assets/1906276/49e1002c-fbb6-47d8-b642-aaf46b218e0b)
-
-
-Change the way the chords are played, and what the name (really, filepath) of the 
-midi and wav files produce are.
-
-```python
-from sonify.chords import play_arpeggio
-
-Sound.from_file(
-    chords_to_wav(chord_sequence, name='test_arpeggio', render_chord=play_arpeggio)
-).display()
-```
-
-![image](https://github.com/thorwhalen/sonify/assets/1906276/0f046317-3965-4544-ae4b-288a0762ec4d)
-
