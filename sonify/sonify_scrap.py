@@ -63,7 +63,7 @@ def save_or_return_audio(waveform, sample_rate, filepath=None):
         return waveform, sample_rate
 
 
-def sonify_dataframe(
+def sonification_dataframe(
     df, pitch_col, duration_col, volume_col, sample_rate=44100, filepath=None
 ):
     df, label_encoders = preprocess_dataframe(df)

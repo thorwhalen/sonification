@@ -6,7 +6,7 @@ from typing import Sequence, Tuple, Callable, Mapping, Dict
 import os
 import re
 from config2py import process_path
-from sonify.util import (
+from sonification.util import (
     DFLT_OUTPUT_NAME,
     DFLT_MIDI_OUTPUT,
     DFLT_SOUNDFONT,
@@ -262,7 +262,7 @@ def chords_to_wav(
     :param soundfont: Path to the SoundFont file.
     :param render_chord: Function defining how the chords should be played.
     """
-    from sonify.converters import midi_to_wav
+    from sonification.converters import midi_to_wav
 
     midi_file = f'{name}.mid'
     wav_file = f'{name}.wav'

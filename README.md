@@ -1,9 +1,9 @@
 
-# sonify
+# sonification
  Map data to sound allowing it to be interpreted it in an auditory manner
 
 
-To install:	```pip install sonify```
+To install:	```pip install sonification```
 
 # Examples
 
@@ -64,7 +64,7 @@ def save_or_return_audio(waveform, sample_rate, filepath=None):
     else:
         return waveform, sample_rate
 
-def sonify_dataframe(df, pitch_col, duration_col, volume_col, sample_rate=44100, filepath=None):
+def sonification_dataframe(df, pitch_col, duration_col, volume_col, sample_rate=44100, filepath=None):
     df, label_encoders = preprocess_dataframe(df)
     waveform, sr = map_features_to_audio(df, pitch_col, duration_col, volume_col, sample_rate)
     return save_or_return_audio(waveform, sr, filepath)
@@ -75,7 +75,7 @@ df = pd.DataFrame({
     'duration': [0.5, 0.5, 0.5, 0.5],
     'volume': [0.5, 0.7, 0.9, 1.0]
 })
-waveform, sr = sonify_dataframe(df, 'pitch', 'duration', 'volume')
+waveform, sr = sonification_dataframe(df, 'pitch', 'duration', 'volume')
 
 # To play the audio
 if waveform is not None and len(waveform) > 0:

@@ -1,4 +1,4 @@
-"""Utils for sonify."""
+"""Utils for sonification."""
 
 from importlib.resources import files
 from functools import partial
@@ -8,7 +8,7 @@ from config2py import (
     simple_config_getter,
 )
 
-pkg_name = 'sonify'
+pkg_name = 'sonification'
 
 data_files = files(pkg_name) / 'data'
 

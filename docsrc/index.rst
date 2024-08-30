@@ -1,4 +1,4 @@
-Welcome to sonify's documentation!
+Welcome to sonification's documentation!
 ==================================
 
 
