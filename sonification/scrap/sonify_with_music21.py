@@ -3,13 +3,14 @@ Emotion Music Generator
 
 A customizable music generation tool that creates MIDI music based on emotion parameters.
 This module uses music21 to generate melodies and accompaniments that reflect emotional
-timeseries data.
+timeseries data, with enhanced melodic and harmonic variation.
 
 Key Components:
 - Feature Mapping: Maps raw emotion features to musical dimensions (valence, arousal, etc.)
 - Scale Selection: Customizable scales for different emotional states
-- Chord Progression: Customizable chord progressions based on emotional states
-- Melodic Generation: Creates melodies reflecting emotional parameters
+- Chord Progression: Dynamic and varied chord progressions based on emotional states
+- Melodic Generation: Creates varied melodies reflecting emotional parameters using
+  generative algorithms rather than fixed patterns
 - Musical Parameters: Customizable tempo, note durations, and dynamics
 
 Main Parameters:
@@ -19,12 +20,14 @@ Main Parameters:
 - feature_mapping: How to group emotion features into musical dimensions
 """
 
+import math
 import pandas as pd
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from typing import List, Dict, Optional, Union, Tuple, Callable, Any
+from typing import List, Dict, Optional, Union, Tuple, Callable, Any, Generator, Set, Iterator
 import time
+import random
 
 # Default module constants - can be modified if needed
 DEFAULT_SCALE = [0, 2, 4, 5, 7, 9, 11]  # C Major (0=C, 1=C#, etc.)
@@ -47,34 +50,6 @@ DEFAULT_FEATURE_MAPPING = {
     'complexity': ['assertion_strength', 'factual_speculative', 'intent_persuasion']
 }
 
-# Chord mappings - can be modified if needed
-DEFAULT_CHORD_MAPPINGS = {
-    'complex': [
-        ('C', 'major-seventh'),
-        ('A', 'minor-seventh'),
-        ('F', 'major-seventh'),
-        ('D', 'minor-seventh')
-    ],
-    'tense': [
-        ('C', 'minor'),
-        ('G', 'dominant-seventh'),
-        ('A', 'diminished'),
-        ('D', 'half-diminished-seventh')
-    ],
-    'positive': [
-        ('C', 'major'),
-        ('G', 'major'),
-        ('A', 'minor'),
-        ('F', 'major')
-    ],
-    'negative': [
-        ('C', 'minor'),
-        ('G', 'minor'),
-        ('E-flat', 'major'),
-        ('F', 'minor')
-    ]
-}
-
 # Module requires music21 to be installed
 import music21
 
@@ -88,6 +63,12 @@ def normalize_emotion_data(df: pd.DataFrame) -> pd.DataFrame:
         
     Returns:
         DataFrame with normalized emotion values
+        
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({'emotion1': [-1, 0, 2], 'emotion2': [0, 0.5, 1]})
+    >>> normalized = normalize_emotion_data(df)
+    >>> normalized['emotion1'].min() >= 0 and normalized['emotion1'].max() <= 1
+    True
     """
     # Create a copy of the dataframe to avoid modifying the original
     normalized_df = df.copy()
@@ -160,8 +141,100 @@ def transpose_scale(
         
     Returns:
         Transposed scale
+        
+    >>> transpose_scale([0, 2, 4, 5, 7, 9, 11], 2)  # Transpose C major to D major
+    [2, 4, 6, 7, 9, 11, 1]
     """
     return [(note + root) % 12 for note in base_scale]
+
+
+def get_note_name(pitch_value: int) -> str:
+    """
+    Convert a pitch value (0-11) to a note name.
+    
+    Args:
+        pitch_value: Integer pitch value (0=C, 1=C#, etc.)
+        
+    Returns:
+        Note name string
+        
+    >>> get_note_name(0)
+    'C'
+    >>> get_note_name(1)
+    'C#'
+    """
+    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    return note_names[pitch_value % 12]
+
+
+def _parse_note_name(note: str) -> Tuple[str, str]:
+    """
+    Parse a note name to separate the letter name and accidentals.
+    
+    Args:
+        note: Note name string (e.g., 'C', 'F#', 'E-flat')
+        
+    Returns:
+        Tuple of (base_note, accidental)
+    """
+    # Handle flat notation in root
+    if '-flat' in note:
+        base = note[0]
+        accidental = 'b'
+        return base, accidental
+    elif '-' in note and len(note) > 1 and note[1] == '-':
+        base = note[0]
+        accidental = 'b'
+        return base, accidental
+    elif len(note) > 1 and note[1] == 'b':
+        base = note[0]
+        accidental = 'b'
+        return base, accidental
+    elif len(note) > 1 and note[1] == '#':
+        base = note[0]
+        accidental = '#'
+        return base, accidental
+    else:
+        return note[0], ''
+
+
+def note_to_pitch_value(note: str) -> int:
+    """
+    Convert a note name to a pitch value (0-11).
+    
+    Args:
+        note: Note name string (e.g., 'C', 'F#', 'Eb')
+        
+    Returns:
+        Integer pitch value
+        
+    >>> note_to_pitch_value('C')
+    0
+    >>> note_to_pitch_value('F#')
+    6
+    >>> note_to_pitch_value('Eb')
+    3
+    """
+    # Music21 note names (for all 12 semitones)
+    note_names = {'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 
+                 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11}
+    
+    # Flat equivalents
+    flat_equivalents = {'Db': 1, 'Eb': 3, 'Gb': 6, 'Ab': 8, 'Bb': 10}
+    
+    base, accidental = _parse_note_name(note)
+    
+    if accidental == 'b':
+        note_str = f"{base}b"
+        if note_str in flat_equivalents:
+            return flat_equivalents[note_str]
+        else:
+            # Handle other flats by subtracting 1 from the base note
+            return (note_names[base] - 1) % 12
+    elif accidental == '#':
+        return (note_names[base] + 1) % 12
+    else:
+        return note_names[base]
 
 
 def transpose_chord_progression(
@@ -180,44 +253,13 @@ def transpose_chord_progression(
     """
     # Music21 note names (for all 12 semitones)
     note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    # Alternative flat names (to convert flat notation to our sharp-based list)
-    flat_to_sharp = {'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#', 
-                      'Df': 'C#', 'Ef': 'D#', 'Gf': 'F#', 'Af': 'G#', 'Bf': 'A#'}
     
     transposed_progression = []
     for root, quality in chord_progression:
-        # Convert 'E-flat' or 'E-' notation to 'Eb' format
-        if '-flat' in root:
-            root = root.replace('-flat', 'b')
-        if '-' in root and len(root) > 1 and root[1] == '-':
-            root = root[0] + 'b' + root[2:]
-        
-        # Handle flats properly
-        if len(root) > 1 and root[1] == 'b':
-            # Convert flat notation to the equivalent sharp
-            if root in flat_to_sharp:
-                base_idx = note_names.index(flat_to_sharp[root])
-            else:
-                # Handle multi-character flat notation
-                base_note = root[0]
-                base_idx = note_names.index(base_note)
-                base_idx = (base_idx - 1) % 12
-        else:
-            # Get the base note without any modifiers
-            base_note = root[0].upper()
-            
-            # Find the index of the base note
-            base_idx = note_names.index(base_note)
-            
-            # Handle sharps in the root
-            if len(root) > 1 and root[1] == '#':
-                base_idx = (base_idx + 1) % 12
-        
-        # Calculate new root index
-        new_idx = (base_idx + semitones) % 12
-        
-        # Get new root name
-        new_root = note_names[new_idx]
+        # Get the pitch value, transpose it, and convert back to a note name
+        pitch_value = note_to_pitch_value(root)
+        new_pitch_value = (pitch_value + semitones) % 12
+        new_root = note_names[new_pitch_value]
         
         # Add to the transposed progression
         transposed_progression.append((new_root, quality))
@@ -225,73 +267,251 @@ def transpose_chord_progression(
     return transposed_progression
 
 
-def get_chord_notes(
+def generate_chord_notes(
     root: str, 
-    quality: str
+    quality: str,
+    inversion: int = 0,
+    base_octave: int = 3
 ) -> List[str]:
     """
-    Get the notes for a chord based on root and quality.
+    Generate the notes for a chord based on root, quality, and inversion.
     
     Args:
         root: Root note name (e.g., 'C', 'F#')
         quality: Chord quality (e.g., 'major', 'minor', 'major-seventh')
+        inversion: Chord inversion (0 = root position, 1 = first inversion, etc.)
+        base_octave: Base octave for the chord
         
     Returns:
         List of note names in the chord
     """
-    # Handle flat notation in root
+    # Handle flat notation in root for music21 compatibility
     if '-flat' in root:
         root = root.replace('-flat', 'b')
     if '-' in root and len(root) > 1 and root[1] == '-':
         root = root[0] + 'b' + root[2:]
     
-    # Create a music21 chord based on the quality
-    if quality == 'major':
-        chord = [root + '3', root + '4', 
-                music21.note.Note(root + '3').transpose('M3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('P5').nameWithOctave]
-    elif quality == 'minor':
-        chord = [root + '3', root + '4',
-                music21.note.Note(root + '3').transpose('m3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('P5').nameWithOctave]
-    elif quality == 'major-seventh':
-        chord = [root + '3',
-                music21.note.Note(root + '3').transpose('M3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('P5').nameWithOctave,
-                music21.note.Note(root + '3').transpose('M7').nameWithOctave]
-    elif quality == 'minor-seventh':
-        chord = [root + '3',
-                music21.note.Note(root + '3').transpose('m3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('P5').nameWithOctave,
-                music21.note.Note(root + '3').transpose('m7').nameWithOctave]
-    elif quality == 'dominant-seventh':
-        chord = [root + '3',
-                music21.note.Note(root + '3').transpose('M3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('P5').nameWithOctave,
-                music21.note.Note(root + '3').transpose('m7').nameWithOctave]
-    elif quality == 'diminished':
-        chord = [root + '3',
-                music21.note.Note(root + '3').transpose('m3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('d5').nameWithOctave]
-    elif quality == 'half-diminished-seventh':
-        chord = [root + '3',
-                music21.note.Note(root + '3').transpose('m3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('d5').nameWithOctave,
-                music21.note.Note(root + '3').transpose('m7').nameWithOctave]
-    else:
-        # Default to major triad if quality not recognized
-        chord = [root + '3', root + '4',
-                music21.note.Note(root + '3').transpose('M3').nameWithOctave,
-                music21.note.Note(root + '3').transpose('P5').nameWithOctave]
+    # Define chord structures with semitone intervals from root
+    chord_structures = {
+        'major': [0, 4, 7],
+        'minor': [0, 3, 7],
+        'diminished': [0, 3, 6],
+        'augmented': [0, 4, 8],
+        'suspended-fourth': [0, 5, 7],
+        'suspended-second': [0, 2, 7],
+        'major-seventh': [0, 4, 7, 11],
+        'minor-seventh': [0, 3, 7, 10],
+        'dominant-seventh': [0, 4, 7, 10],
+        'half-diminished-seventh': [0, 3, 6, 10],
+        'diminished-seventh': [0, 3, 6, 9],
+        'augmented-seventh': [0, 4, 8, 10],
+        'major-sixth': [0, 4, 7, 9],
+        'minor-sixth': [0, 3, 7, 9],
+        'minor-major-seventh': [0, 3, 7, 11],
+        'add9': [0, 4, 7, 14],
+        'add11': [0, 4, 7, 17],
+        'ninth': [0, 4, 7, 10, 14],
+        'minor-ninth': [0, 3, 7, 10, 14],
+        'major-ninth': [0, 4, 7, 11, 14],
+        'eleventh': [0, 4, 7, 10, 14, 17],
+        'thirteenth': [0, 4, 7, 10, 14, 17, 21]
+    }
     
-    return chord
+    # Use the default major triad if quality not recognized
+    intervals = chord_structures.get(quality, chord_structures['major'])
+    
+    # Create a music21 note for the root
+    root_note = music21.note.Note(root + str(base_octave))
+    
+    # Generate notes based on the intervals
+    notes = []
+    for interval in intervals:
+        note = music21.note.Note(root_note.pitch)
+        note.pitch.transpose(interval, inPlace=True)
+        notes.append(note.nameWithOctave)
+    
+    # Handle inversions
+    if inversion > 0 and inversion < len(notes):
+        # Move the bottom notes up an octave for the requested inversion
+        for i in range(inversion):
+            # Parse the note name and octave
+            note_name = notes[i]
+            base_name = ''.join([c for c in note_name if not c.isdigit()])
+            octave = int(''.join([c for c in note_name if c.isdigit()]))
+            
+            # Move up an octave
+            notes[i] = base_name + str(octave + 1)
+    
+    return notes
+
+
+# Extended chord progressions library with varied emotional qualities
+EXTENDED_CHORD_MAPPINGS = {
+    # More complex chord progressions
+    'complex': [
+        [('C', 'major-seventh'), ('A', 'minor-seventh'), ('F', 'major-seventh'), ('D', 'minor-seventh')],
+        [('C', 'major-ninth'), ('A', 'minor-ninth'), ('F', 'major-ninth'), ('G', 'dominant-seventh')],
+        [('C', 'major-seventh'), ('F', 'major-seventh'), ('D', 'minor-seventh'), ('G', 'suspended-fourth')],
+        [('C', 'major-add9'), ('A', 'minor-add9'), ('F', 'major-add9'), ('G', 'ninth')]
+    ],
+    
+    # Tense chord progressions
+    'tense': [
+        [('C', 'minor'), ('G', 'dominant-seventh'), ('A', 'diminished'), ('D', 'half-diminished-seventh')],
+        [('C', 'minor-seventh'), ('F', 'minor'), ('G', 'dominant-seventh'), ('C', 'diminished')],
+        [('C', 'diminished'), ('D', 'half-diminished-seventh'), ('G', 'dominant-seventh'), ('C', 'minor')],
+        [('C', 'minor-major-seventh'), ('A', 'diminished-seventh'), ('D', 'minor-seventh'), ('G', 'altered')]
+    ],
+    
+    # Positive chord progressions
+    'positive': [
+        [('C', 'major'), ('G', 'major'), ('A', 'minor'), ('F', 'major')],
+        [('C', 'major'), ('F', 'major'), ('G', 'major'), ('C', 'major')],
+        [('C', 'major'), ('A', 'minor'), ('F', 'major'), ('G', 'dominant-seventh')],
+        [('C', 'major-sixth'), ('A', 'minor-seventh'), ('D', 'minor-seventh'), ('G', 'major')]
+    ],
+    
+    # Negative chord progressions
+    'negative': [
+        [('C', 'minor'), ('G', 'minor'), ('E-flat', 'major'), ('F', 'minor')],
+        [('C', 'minor'), ('F', 'minor'), ('G', 'minor'), ('C', 'minor')],
+        [('C', 'minor'), ('A', 'diminished'), ('F', 'minor'), ('G', 'minor')],
+        [('C', 'minor-seventh'), ('F', 'minor-seventh'), ('G', 'dominant-seventh'), ('C', 'minor')]
+    ],
+    
+    # Dreamy/ambiguous chord progressions
+    'dreamy': [
+        [('C', 'major-seventh'), ('A', 'minor-seventh'), ('F', 'major-seventh'), ('F#', 'diminished')],
+        [('C', 'suspended-fourth'), ('G', 'suspended-second'), ('F', 'major-add9'), ('E', 'minor-seventh')],
+        [('C', 'major-seventh'), ('E', 'minor-seventh'), ('A', 'minor-seventh'), ('F', 'major-seventh')],
+        [('D', 'minor-ninth'), ('G', 'suspended-fourth'), ('C', 'major-add9'), ('A', 'minor-seventh')]
+    ],
+    
+    # Triumphant chord progressions
+    'triumphant': [
+        [('C', 'major'), ('G', 'major'), ('F', 'major'), ('C', 'major')],
+        [('C', 'major'), ('E', 'minor'), ('F', 'major'), ('G', 'major')],
+        [('C', 'major'), ('D', 'major'), ('G', 'major'), ('C', 'major')],
+        [('F', 'major'), ('C', 'major'), ('G', 'major'), ('C', 'major')]
+    ],
+    
+    # Mysterious chord progressions
+    'mysterious': [
+        [('C', 'minor-major-seventh'), ('A-flat', 'major-seventh'), ('F', 'minor-sixth'), ('G', 'dominant-seventh')],
+        [('C', 'minor-sixth'), ('E-flat', 'major-seventh'), ('A-flat', 'major-ninth'), ('G', 'altered')],
+        [('C', 'minor-seventh'), ('F', 'minor-ninth'), ('D', 'half-diminished-seventh'), ('G', 'dominant-ninth')],
+        [('C', 'suspended-second'), ('B-flat', 'major-add9'), ('A-flat', 'major-seventh'), ('G', 'suspended-fourth')]
+    ]
+}
+
+# Define musical scales with emotional associations
+EXTENDED_SCALES = {
+    'major': [0, 2, 4, 5, 7, 9, 11],  # C D E F G A B - bright, happy
+    'natural_minor': [0, 2, 3, 5, 7, 8, 10],  # C D Eb F G Ab Bb - sad, pensive
+    'harmonic_minor': [0, 2, 3, 5, 7, 8, 11],  # C D Eb F G Ab B - exotic, mysterious
+    'melodic_minor': [0, 2, 3, 5, 7, 9, 11],  # C D Eb F G A B - melancholic, expressive
+    'dorian': [0, 2, 3, 5, 7, 9, 10],  # C D Eb F G A Bb - jazzy, contemplative
+    'phrygian': [0, 1, 3, 5, 7, 8, 10],  # C Db Eb F G Ab Bb - exotic, tense
+    'lydian': [0, 2, 4, 6, 7, 9, 11],  # C D E F# G A B - dreamy, futuristic
+    'mixolydian': [0, 2, 4, 5, 7, 9, 10],  # C D E F G A Bb - playful, bluesy
+    'locrian': [0, 1, 3, 5, 6, 8, 10],  # C Db Eb F Gb Ab Bb - dissonant, unstable
+    'pentatonic_major': [0, 2, 4, 7, 9],  # C D E G A - simple, folk
+    'pentatonic_minor': [0, 3, 5, 7, 10],  # C Eb F G Bb - blues, eastern
+    'blues': [0, 3, 5, 6, 7, 10],  # C Eb F F# G Bb - melancholic, soulful
+    'whole_tone': [0, 2, 4, 6, 8, 10],  # C D E F# G# A# - dreamy, floating
+    'chromatic': list(range(12)),  # All 12 tones - chaotic, complex
+    'octatonic': [0, 2, 3, 5, 6, 8, 9, 11]  # C D Eb F Gb Ab A B - mysterious, jazz
+}
+
+# Extended duration patterns for increased rhythmic variety
+EXTENDED_DURATION_MAPPINGS = {
+    'high_arousal': [
+        [0.25, 0.25, 0.5, 0.25, 0.25, 0.5],  # Fast notes
+        [0.125, 0.125, 0.25, 0.125, 0.125, 0.25, 0.5],  # Very fast notes
+        [0.25, 0.25, 0.25, 0.25, 0.5, 0.5],  # Staccato feel
+        [0.125, 0.125, 0.125, 0.125, 0.25, 0.25, 0.25, 0.25],  # Rapid notes
+        [0.25, 0.125, 0.125, 0.25, 0.25, 0.5]  # Syncopated fast
+    ],
+    'medium_arousal': [
+        [0.5, 0.5, 0.5, 0.5],  # Medium notes
+        [0.25, 0.25, 0.5, 0.5, 0.5],  # Medium with some fast notes
+        [0.5, 0.25, 0.25, 0.5, 0.5],  # Slightly syncopated
+        [0.75, 0.25, 0.5, 0.5],  # Dotted rhythm
+        [0.5, 0.5, 0.25, 0.25, 0.5]  # Mixed medium rhythm
+    ],
+    'low_arousal': [
+        [1.0, 0.5, 1.0, 1.5],  # Slow notes
+        [1.5, 0.5, 2.0],  # Very slow notes
+        [1.0, 1.0, 1.0, 1.0],  # Steady slow notes
+        [2.0, 0.5, 0.5, 1.0],  # Long then short
+        [1.0, 0.5, 0.5, 2.0]  # Building to long note
+    ]
+}
+
+
+def select_scale_for_emotion(
+    valence: float,
+    tension: float,
+    complexity: float
+) -> str:
+    """
+    Select an appropriate scale type based on emotional parameters.
+    
+    Args:
+        valence: Valence parameter (0-1)
+        tension: Tension parameter (0-1)
+        complexity: Complexity parameter (0-1)
+        
+    Returns:
+        Scale type name from EXTENDED_SCALES
+    """
+    # High complexity favors more complex scales
+    if complexity > 0.8:
+        if tension > 0.7:
+            return 'octatonic'
+        elif valence > 0.6:
+            return 'lydian'
+        else:
+            return 'harmonic_minor'
+    
+    # High tension favors more dissonant or unusual scales
+    elif tension > 0.7:
+        if valence < 0.3:
+            return 'phrygian'
+        elif complexity > 0.5:
+            return 'locrian'
+        else:
+            return 'blues'
+    
+    # High valence favors more consonant, "happy" scales
+    elif valence > 0.7:
+        if complexity > 0.6:
+            return 'mixolydian'
+        else:
+            return 'major'
+    
+    # Low valence favors more melancholic scales
+    elif valence < 0.3:
+        if complexity > 0.6:
+            return 'melodic_minor'
+        else:
+            return 'natural_minor'
+    
+    # Medium values use more balanced scales
+    else:
+        if complexity > 0.6:
+            return 'dorian'
+        elif tension > 0.5:
+            return 'pentatonic_minor'
+        else:
+            return 'pentatonic_major'
 
 
 def select_chord_progression(
     valence: float,
     tension: float,
     complexity: float,
-    chord_mappings: Dict[str, List[Tuple[str, str]]] = None,
+    chord_mappings: Dict[str, List[List[Tuple[str, str]]]] = None,
     scale_root: int = 0
 ) -> List[Tuple[str, str]]:
     """
@@ -308,17 +528,39 @@ def select_chord_progression(
         List of (root, quality) tuples representing the chord progression
     """
     if chord_mappings is None:
-        chord_mappings = DEFAULT_CHORD_MAPPINGS
+        chord_mappings = EXTENDED_CHORD_MAPPINGS
     
-    # Select the base chord progression based on emotional state
+    # Select the chord progression type based on emotional state
     if complexity > 0.7:
-        progression = chord_mappings['complex']
+        progression_type = 'complex'
     elif tension > 0.7:
-        progression = chord_mappings['tense']
-    elif valence > 0.6:
-        progression = chord_mappings['positive']
+        progression_type = 'tense'
+    elif valence > 0.7:
+        progression_type = 'triumphant'
+    elif valence > 0.5:
+        progression_type = 'positive'
+    elif valence < 0.3:
+        progression_type = 'negative'
+    elif tension > 0.5 and complexity > 0.5:
+        progression_type = 'mysterious'
     else:
-        progression = chord_mappings['negative']
+        progression_type = 'dreamy'
+    
+    # Select a random progression from the chosen type
+    if progression_type in chord_mappings:
+        progressions = chord_mappings[progression_type]
+        if progressions:
+            # Use emotional values to influence the selection rather than pure random
+            # This creates more consistent progressions for similar emotional states
+            emotion_seed = int((valence * 1000) + (tension * 100) + (complexity * 10))
+            random.seed(emotion_seed)
+            progression = progressions[emotion_seed % len(progressions)]
+        else:
+            # Fallback to first progression in 'positive' if empty
+            progression = chord_mappings['positive'][0]
+    else:
+        # Fallback to first progression in 'positive' if type not found
+        progression = chord_mappings['positive'][0]
     
     # Transpose the progression if needed
     if scale_root != 0:
@@ -327,23 +569,233 @@ def select_chord_progression(
     return progression
 
 
+def generate_markov_melody(
+    scale: List[int],
+    num_notes: int,
+    valence: float,
+    tension: float,
+    complexity: float,
+    seed_degree: int = None
+) -> List[int]:
+    """
+    Generate a melody using a Markov chain approach based on emotional parameters.
+    
+    Args:
+        scale: List of scale degrees (0-11)
+        num_notes: Number of notes to generate
+        valence: Valence parameter (0-1)
+        tension: Tension parameter (0-1)
+        complexity: Complexity parameter (0-1)
+        seed_degree: Starting scale degree (index in scale)
+        
+    Returns:
+        List of scale degrees for the melody
+    """
+    # Define transition probabilities based on emotional parameters
+    
+    # For high valence (happy), favor upward movement and consonant intervals
+    if valence > 0.7:
+        # Movement probabilities: Down 2, Down 1, Same, Up 1, Up 2
+        step_probs = [0.1, 0.2, 0.2, 0.3, 0.2]
+        # Probability of leap (jumping more than 2 scale degrees)
+        leap_prob = 0.2
+        # Scale degrees to emphasize (0-indexed within scale)
+        emphasis = [0, 2, 4]  # Root, 3rd, 5th
+    
+    # For low valence (sad), favor downward movement
+    elif valence < 0.4:
+        step_probs = [0.3, 0.3, 0.2, 0.1, 0.1]
+        leap_prob = 0.15
+        emphasis = [1, 3, 5]  # 2nd, 4th, 6th
+    
+    # For high tension, favor dissonant intervals
+    elif tension > 0.7:
+        step_probs = [0.2, 0.2, 0.1, 0.2, 0.3]
+        leap_prob = 0.3
+        emphasis = [1, 4, 6]  # 2nd, 5th, 7th
+    
+    # For high complexity, more varied movement
+    elif complexity > 0.7:
+        step_probs = [0.2, 0.2, 0.2, 0.2, 0.2]
+        leap_prob = 0.4
+        emphasis = [0, 2, 4, 6]  # Root, 3rd, 5th, 7th
+    
+    # Default/balanced
+    else:
+        step_probs = [0.2, 0.2, 0.2, 0.2, 0.2]
+        leap_prob = 0.2
+        emphasis = [0, 2, 4]  # Root, 3rd, 5th
+    
+    # Initialize the melody
+    melody = []
+    
+    # Set the seed note
+    if seed_degree is None:
+        # Choose a seed note with emphasis on the selected degrees
+        scale_idx = random.choices(
+            range(len(scale)), 
+            weights=[1.5 if i % len(scale) in emphasis else 1.0 for i in range(len(scale))],
+            k=1
+        )[0]
+    else:
+        scale_idx = seed_degree % len(scale)
+    
+    melody.append(scale_idx)
+    
+    # Generate subsequent notes
+    for _ in range(1, num_notes):
+        current_degree = melody[-1]
+        
+        # Decide whether to make a leap or step
+        if random.random() < leap_prob:
+            # Make a leap (3+ scale degrees)
+            leap_range = [-4, -3, 3, 4]
+            leap = random.choice(leap_range)
+            new_degree = (current_degree + leap) % len(scale)
+        else:
+            # Make a step (-2 to +2 scale degrees)
+            step = random.choices(
+                [-2, -1, 0, 1, 2],
+                weights=step_probs,
+                k=1
+            )[0]
+            new_degree = (current_degree + step) % len(scale)
+        
+        # Apply emphasis on certain scale degrees occasionally
+        if random.random() < 0.3:  # 30% chance to apply emphasis
+            if new_degree % len(scale) not in emphasis:
+                # Move to a nearby emphasized degree
+                emphasized_degrees = [d % len(scale) for d in emphasis]
+                emphasized_degrees.sort(key=lambda d: abs(d - new_degree))
+                new_degree = emphasized_degrees[0]
+        
+        melody.append(new_degree)
+    
+    # Translate scale indices to actual pitches in the scale
+    return [scale[idx % len(scale)] for idx in melody]
+
+
+def generate_contoured_melody(
+    scale: List[int],
+    num_notes: int,
+    valence: float,
+    tension: float,
+    complexity: float
+) -> List[int]:
+    """
+    Generate a melody with a specific contour based on emotional parameters.
+    
+    Args:
+        scale: List of scale degrees (0-11)
+        num_notes: Number of notes to generate
+        valence: Valence parameter (0-1)
+        tension: Tension parameter (0-1)
+        complexity: Complexity parameter (0-1)
+        
+    Returns:
+        List of pitches for the melody
+    """
+    # Define melodic contours based on emotional parameters
+    contours = {
+        'ascending': lambda x: x / (num_notes - 1) if num_notes > 1 else 0.5,
+        'descending': lambda x: 1 - (x / (num_notes - 1)) if num_notes > 1 else 0.5,
+        'arch': lambda x: 4 * ((x / (num_notes - 1)) * (1 - (x / (num_notes - 1)))) if num_notes > 1 else 0.5,
+        'varch': lambda x: 1 - 4 * ((x / (num_notes - 1)) * (1 - (x / (num_notes - 1)))) if num_notes > 1 else 0.5,
+        'random': lambda x: random.random(),
+        'wave': lambda x: 0.5 + 0.5 * math.sin(2 * math.pi * x / (num_notes / 2)) if num_notes > 1 else 0.5
+    }
+    
+    # Select contour based on emotional parameters
+    if valence > 0.7:
+        if tension < 0.3:
+            contour_func = contours['ascending']  # Happy, optimistic
+        else:
+            contour_func = contours['arch']  # Excited but tense
+    elif valence < 0.3:
+        if tension > 0.7:
+            contour_func = contours['varch']  # Sad and tense
+        else:
+            contour_func = contours['descending']  # Sad, resigned
+    else:
+        if complexity > 0.7:
+            contour_func = contours['random']  # Complex, unpredictable
+        elif tension > 0.7:
+            contour_func = contours['wave']  # Tense, fluctuating
+        else:
+            contour_func = contours['wave']  # Balanced, flowing
+    
+    # Generate melody based on contour
+    melody = []
+    scale_len = len(scale)
+    for i in range(num_notes):
+        # Calculate contour value (0-1) for this position
+        contour_val = contour_func(i)
+        
+        # Map contour value to scale degree
+        scale_idx = int(contour_val * scale_len) % scale_len
+        
+        # Add randomness based on complexity
+        if random.random() < complexity:
+            scale_idx = (scale_idx + random.choice([-1, 1])) % scale_len
+        
+        # Add the scale degree to melody
+        melody.append(scale[scale_idx])
+    
+    return melody
+
+
+def select_duration_pattern(
+    arousal: float,
+    duration_mappings: Dict[str, List[List[float]]] = None
+) -> List[float]:
+    """
+    Select an appropriate note duration pattern based on arousal level.
+    
+    Args:
+        arousal: Arousal parameter (0-1)
+        duration_mappings: Dictionary mapping arousal levels to lists of duration patterns
+        
+    Returns:
+        List of note durations
+    """
+    if duration_mappings is None:
+        duration_mappings = EXTENDED_DURATION_MAPPINGS
+    
+    # Select the category based on arousal
+    if arousal > 0.7:
+        category = 'high_arousal'
+    elif arousal < 0.4:
+        category = 'low_arousal'
+    else:
+        category = 'medium_arousal'
+    
+    # Get patterns for the category
+    patterns = duration_mappings.get(category, duration_mappings['medium_arousal'])
+    
+    # Seed with arousal to get consistent results for similar values
+    random.seed(int(arousal * 1000))
+    
+    # Select a random pattern from the category
+    return random.choice(patterns)
+
+
 def create_emotion_music(
     df: pd.DataFrame,
     output_file: str = "emotion_music.mid",
     scale: List[int] = None,
     scale_root: int = DEFAULT_SCALE_ROOT,
     feature_mapping: Dict[str, List[str]] = None,
-    chord_mappings: Dict[str, List[Tuple[str, str]]] = None,
+    chord_mappings: Dict[str, List[List[Tuple[str, str]]]] = None,
     phrase_duration: float = DEFAULT_PHRASE_DURATION,
     tempo_range: Tuple[int, int] = DEFAULT_TEMPO_RANGE,
     octave_range: Tuple[int, int] = DEFAULT_OCTAVE_RANGE,
     velocity_range: Tuple[int, int] = DEFAULT_VELOCITY_RANGE,
-    duration_mappings: Dict[str, List[float]] = None,
+    duration_mappings: Dict[str, List[List[float]]] = None,
     normalize: bool = True,
     progress_callback: Callable[[int, int], None] = None
 ) -> str:
     """
-    Create MIDI music based on emotion data.
+    Create MIDI music based on emotion data with enhanced melodic and harmonic variation.
     
     Args:
         df: DataFrame with emotion parameters
@@ -363,6 +815,8 @@ def create_emotion_music(
     Returns:
         Path to the generated MIDI file
     """
+    # Import math for some of the contour functions
+    import math
     
     # Set defaults
     if scale is None:
@@ -370,9 +824,9 @@ def create_emotion_music(
     if feature_mapping is None:
         feature_mapping = DEFAULT_FEATURE_MAPPING
     if chord_mappings is None:
-        chord_mappings = DEFAULT_CHORD_MAPPINGS
+        chord_mappings = EXTENDED_CHORD_MAPPINGS
     if duration_mappings is None:
-        duration_mappings = DEFAULT_DURATION_MAPPINGS
+        duration_mappings = EXTENDED_DURATION_MAPPINGS
     
     # Prepare the data
     if normalize:
@@ -399,22 +853,17 @@ def create_emotion_music(
     accomp_part = music21.stream.Part()
     accomp_part.insert(0, music21.instrument.Piano())
     
+    # Add a counter melody part
+    counter_melody_part = music21.stream.Part()
+    counter_melody_part.insert(0, music21.instrument.Piano())
+    
     # Current position in the score
     current_offset = 0.0
     
-    # Create music21 scales based on the provided scale degrees
-    scale_degrees = [scale_root + note for note in scale]
-    
-    # Create major and minor versions for different emotional contexts
-    major_scale = music21.scale.ConcreteScale(
-        pitches=[music21.pitch.Pitch(n % 12) for n in scale_degrees]
-    )
-    minor_scale = music21.scale.ConcreteScale(
-        pitches=[music21.pitch.Pitch((scale_root + n) % 12) for n in [0, 2, 3, 5, 7, 8, 10]]
-    )
-    
     # Process each row in the dataframe
     total_rows = len(mapped_df)
+    last_melody_note = None  # Track last melody note for smoother transitions
+    
     for idx, row in mapped_df.iterrows():
         # Update progress if callback provided
         if progress_callback and idx % max(1, total_rows // 10) == 0:
@@ -426,13 +875,16 @@ def create_emotion_music(
         tension = row.get('tension', 0.5)  # conflict/dissonance
         complexity = row.get('complexity', 0.5)  # musical complexity
         
-        # 1. Select scale based on emotional state
-        if valence > 0.7:
-            current_scale = major_scale  # More positive emotion
-        elif valence < 0.4:
-            current_scale = minor_scale  # More negative emotion
-        else:
-            current_scale = major_scale if valence > 0.5 else minor_scale
+        # 1. Select scale type based on emotional state
+        scale_type = select_scale_for_emotion(valence, tension, complexity)
+        current_scale_degrees = EXTENDED_SCALES[scale_type]
+        
+        # Apply root transposition
+        current_scale = transpose_scale(current_scale_degrees, scale_root)
+        
+        # Create music21 scale object for note generation
+        scale_pitches = [music21.pitch.Pitch(n % 12) for n in current_scale]
+        concrete_scale = music21.scale.ConcreteScale(pitches=scale_pitches)
         
         # 2. Determine tempo from arousal
         tempo_min, tempo_max = tempo_range
@@ -450,10 +902,19 @@ def create_emotion_music(
         # 4. Create a musical phrase
         phrase_offset = current_offset
         
+        # Select appropriate note durations based on arousal
+        durations = select_duration_pattern(arousal, duration_mappings)
+        
         # Add chords to accompaniment
         for i, (root, quality) in enumerate(chord_progression):
-            # Get chord notes
-            chord_notes = get_chord_notes(root, quality)
+            # Determine chord inversion for variety
+            inversion = 0
+            if complexity > 0.5:
+                # More complex emotional states use inversions
+                inversion = i % 3
+            
+            # Get chord notes with the determined inversion
+            chord_notes = generate_chord_notes(root, quality, inversion)
             
             # Create chord
             chord = music21.chord.Chord(chord_notes)
@@ -469,58 +930,177 @@ def create_emotion_music(
             # Position chord in the accompaniment part
             chord_offset = phrase_offset + (i * phrase_duration / len(chord_progression))
             accomp_part.insert(chord_offset, chord)
+            
+            # Add arpeggiated notes for high complexity
+            if complexity > 0.6:
+                # Create arpeggios for the chord
+                arpeggio_durations = [0.25] * 4  # Default to 16th notes
+                if arousal < 0.4:
+                    arpeggio_durations = [0.5] * 2  # Slower arpeggios for low arousal
+                
+                for j, note_name in enumerate(chord_notes):
+                    # Skip some notes based on complexity
+                    if random.random() > complexity:
+                        continue
+                    
+                    # Create note
+                    note = music21.note.Note(note_name)
+                    note.duration = music21.duration.Duration(arpeggio_durations[j % len(arpeggio_durations)])
+                    
+                    # Set velocity
+                    note.volume.velocity = min(115, chord_velocity - 10)
+                    
+                    # Position in accompaniment part
+                    note_offset = chord_offset + (j * sum(arpeggio_durations[:1]) / len(chord_notes))
+                    
+                    # Only add if we're still within the chord's time span
+                    if note_offset < chord_offset + chord.duration.quarterLength:
+                        accomp_part.insert(note_offset, note)
         
         # 5. Create melody
-        num_notes = 8  # Number of notes per phrase
+        num_notes = max(4, int(8 * (1 + complexity)))  # More notes for higher complexity
         
-        # Select appropriate note durations based on arousal
-        if arousal > 0.7:
-            durations = duration_mappings['high_arousal']
-        elif arousal < 0.4:
-            durations = duration_mappings['low_arousal']
+        # Use previous melody note as seed if available (for continuity)
+        seed_note = None
+        if last_melody_note is not None:
+            # Find position of the last note in the current scale
+            for i, pitch in enumerate(current_scale):
+                if pitch % 12 == last_melody_note % 12:
+                    seed_note = i
+                    break
+        
+        # Generate melody using different strategies based on complexity
+        if complexity > 0.7:
+            # Use Markov chain for complex melodies
+            melody_pitches = generate_markov_melody(
+                current_scale, num_notes, valence, tension, complexity, seed_note
+            )
         else:
-            durations = duration_mappings['medium_arousal']
+            # Use contoured melody for simpler, more predictable patterns
+            melody_pitches = generate_contoured_melody(
+                current_scale, num_notes, valence, tension, complexity
+            )
         
-        for i in range(num_notes):
-            # Scale degree selection based on emotional state
-            if valence > 0.7 and tension < 0.3:
-                # Happy, stable melody - use stable scale degrees
-                scale_degrees = [1, 3, 5, 8]
-                scale_degree = scale_degrees[i % len(scale_degrees)]
-            elif tension > 0.7:
-                # Tense melody - use more unstable scale degrees
-                scale_degrees = [2, 4, 6, 7]
-                scale_degree = scale_degrees[i % len(scale_degrees)]
-            else:
-                # Mixed melody
-                scale_degree = ((i * 2) % 7) + 1
-            
-            # Get pitch from scale
-            pitch = current_scale.pitchFromDegree(scale_degree)
-            
-            # Adjust octave based on phrase position and arousal
-            octave_min, octave_max = octave_range
-            base_octave = octave_min
-            octave_adj = 1 if i % 3 == 0 else 0
-            octave_adj += 1 if arousal > 0.7 and i % 4 == 2 else 0
-            pitch.octave = min(octave_max, base_octave + octave_adj)
-            
+        # Remember last note for continuity
+        if melody_pitches:
+            last_melody_note = melody_pitches[-1]
+        
+        # Create rhythm pattern based on arousal
+        durations = select_duration_pattern(arousal, duration_mappings)
+        
+        # Place melody notes
+        total_duration = 0
+        for i, pitch in enumerate(melody_pitches):
             # Get note duration
             duration = durations[i % len(durations)]
             
-            # Create note
-            note = music21.note.Note(pitch)
+            # Adjust duration based on phrase length
+            if total_duration + duration > phrase_duration:
+                duration = phrase_duration - total_duration
+                if duration <= 0:
+                    break
+            
+            # Create note from pitch value
+            note = music21.note.Note()
+            note.pitch = music21.pitch.Pitch(pitch)
+            
+            # Adjust octave based on emotional parameters and position
+            octave_min, octave_max = octave_range
+            base_octave = octave_min + 1
+            
+            # Adjust octave based on valence and position in phrase
+            if valence > 0.7:
+                # Higher octave for positive emotions, especially at climactic points
+                octave_adj = 1 if i == num_notes // 2 else 0
+            elif valence < 0.3 and i > num_notes // 2:
+                # Lower octave for negative emotions, especially towards the end
+                octave_adj = -1
+            else:
+                octave_adj = 0
+            
+            # Apply octave adjustment with bounds checking
+            note.pitch.octave = max(octave_min, min(octave_max, base_octave + octave_adj))
+            
+            # Set duration
             note.duration = music21.duration.Duration(duration)
             
             # Set velocity based on arousal and position
             velocity_min, velocity_max = velocity_range
             note_velocity = int(velocity_min + arousal * (velocity_max - velocity_min))
-            note_velocity += 10 if i % 4 == 0 else 0  # Emphasize downbeats
-            note.volume.velocity = min(127, note_velocity)
+            
+            # Emphasize important beats
+            note_velocity += 10 if i % 4 == 0 else 0
+            
+            # Adjust for musical dynamics (crescendo/diminuendo)
+            if i < num_notes // 2:
+                # Crescendo in first half
+                position_factor = i / (num_notes // 2)
+                note_velocity += int(10 * position_factor)
+            else:
+                # Diminuendo in second half
+                position_factor = (i - num_notes // 2) / (num_notes - num_notes // 2)
+                note_velocity -= int(10 * position_factor)
+            
+            note.volume.velocity = min(127, max(30, note_velocity))
             
             # Position note in the melody part
-            note_offset = phrase_offset + (i * phrase_duration / num_notes)
+            note_offset = phrase_offset + total_duration
             melody_part.insert(note_offset, note)
+            
+            total_duration += duration
+        
+        # 6. Add a counter-melody for high complexity
+        if complexity > 0.5:
+            # Create counter-melody using a different generation approach
+            num_counter_notes = max(3, int(6 * complexity))
+            
+            if complexity > 0.7:
+                # For high complexity, more independent counter-melody
+                counter_pitches = generate_markov_melody(
+                    current_scale, num_counter_notes, 1 - valence, tension, complexity
+                )
+            else:
+                # For medium complexity, invert the main melody contour
+                counter_pitches = generate_contoured_melody(
+                    current_scale, num_counter_notes, 1 - valence, tension, complexity
+                )
+            
+            # Create rhythm pattern for counter-melody (slightly offset)
+            counter_durations = select_duration_pattern(max(0.3, arousal - 0.2), duration_mappings)
+            
+            # Place counter-melody notes
+            counter_total_duration = 0
+            counter_offset = phrase_offset + 0.25  # Start slightly after main melody
+            
+            for i, pitch in enumerate(counter_pitches):
+                # Get note duration
+                duration = counter_durations[i % len(counter_durations)]
+                
+                # Adjust duration based on phrase length
+                if counter_total_duration + duration > phrase_duration - 0.25:
+                    duration = phrase_duration - 0.25 - counter_total_duration
+                    if duration <= 0:
+                        break
+                
+                # Create note from pitch value
+                note = music21.note.Note()
+                note.pitch = music21.pitch.Pitch(pitch)
+                
+                # Set octave (typically lower than melody)
+                note.pitch.octave = octave_range[0]
+                
+                # Set duration
+                note.duration = music21.duration.Duration(duration)
+                
+                # Set velocity (softer than main melody)
+                counter_velocity = int(velocity_min + arousal * (velocity_max - velocity_min) * 0.8)
+                note.volume.velocity = min(110, counter_velocity)
+                
+                # Position note in the counter-melody part
+                note_offset = counter_offset + counter_total_duration
+                counter_melody_part.insert(note_offset, note)
+                
+                counter_total_duration += duration
         
         # Move to next phrase
         current_offset += phrase_duration
@@ -532,6 +1112,7 @@ def create_emotion_music(
     # Add parts to the score
     score.insert(0, melody_part)
     score.insert(0, accomp_part)
+    score.insert(0, counter_melody_part)
     
     # Create output directory if it doesn't exist
     output_dir = os.path.dirname(output_file)
@@ -616,6 +1197,137 @@ def visualize_emotion_data(
         plt.close()
 
 
+def visualize_musical_parameters(
+    df: pd.DataFrame,
+    output_file: str = "musical_parameters.png",
+    feature_mapping: Dict[str, List[str]] = None,
+    show_plot: bool = False,
+    figsize: Tuple[int, int] = (14, 8),
+    dpi: int = 300
+):
+    """
+    Create a visualization of how emotion data maps to musical parameters.
+    
+    Args:
+        df: DataFrame with emotion parameters
+        output_file: Path to save visualization
+        feature_mapping: Dictionary mapping musical dimensions to lists of feature names
+        show_plot: Whether to display the plot (in addition to saving)
+        figsize: Figure size (width, height) in inches
+        dpi: DPI for the saved image
+    """
+    # Map raw features to musical dimensions
+    if feature_mapping is None:
+        feature_mapping = DEFAULT_FEATURE_MAPPING
+    
+    mapped_df = map_features(df, feature_mapping)
+    
+    # Create subplots
+    fig, axs = plt.subplots(2, 2, figsize=figsize)
+    fig.suptitle('Mapping of Emotions to Musical Parameters', fontsize=16)
+    
+    # 1. Valence -> Scale type and chord quality
+    axs[0, 0].plot(mapped_df.index, mapped_df['valence'], 'b-')
+    axs[0, 0].set_title('Valence → Scale & Chord Quality')
+    axs[0, 0].set_ylabel('Valence Value')
+    axs[0, 0].set_ylim(0, 1)
+    
+    # Add annotations for scale types
+    valence_thresholds = [0.3, 0.7]
+    valence_labels = ['Minor/Sad Scales', 'Neutral Scales', 'Major/Happy Scales']
+    
+    for i in range(len(valence_thresholds) + 1):
+        if i == 0:
+            y_pos = 0.15
+        elif i == 1:
+            y_pos = 0.5
+        else:
+            y_pos = 0.85
+        
+        axs[0, 0].text(len(mapped_df) * 0.95, y_pos, valence_labels[i], 
+                    ha='right', va='center', bbox=dict(facecolor='white', alpha=0.7))
+    
+    # 2. Arousal -> Tempo and note duration
+    axs[0, 1].plot(mapped_df.index, mapped_df['arousal'], 'r-')
+    axs[0, 1].set_title('Arousal → Tempo & Note Duration')
+    axs[0, 1].set_ylabel('Arousal Value')
+    axs[0, 1].set_ylim(0, 1)
+    
+    # Add annotations for tempo
+    tempo_min, tempo_max = DEFAULT_TEMPO_RANGE
+    arousal_thresholds = [0.3, 0.7]
+    
+    for i, threshold in enumerate(arousal_thresholds):
+        tempo = int(tempo_min + threshold * (tempo_max - tempo_min))
+        y_pos = threshold
+        axs[0, 1].axhline(y=threshold, color='gray', linestyle='--', alpha=0.5)
+        axs[0, 1].text(len(mapped_df) * 0.95, y_pos, f'~{tempo} BPM', 
+                    ha='right', va='center', bbox=dict(facecolor='white', alpha=0.7))
+    
+    # 3. Tension -> Harmony and dissonance
+    axs[1, 0].plot(mapped_df.index, mapped_df['tension'], 'g-')
+    axs[1, 0].set_title('Tension → Harmony & Dissonance')
+    axs[1, 0].set_ylabel('Tension Value')
+    axs[1, 0].set_ylim(0, 1)
+    
+    tension_thresholds = [0.3, 0.7]
+    tension_labels = ['Consonant', 'Moderate Tension', 'Dissonant']
+    
+    for i in range(len(tension_thresholds) + 1):
+        if i == 0:
+            y_pos = 0.15
+        elif i == 1:
+            y_pos = 0.5
+        else:
+            y_pos = 0.85
+        
+        axs[1, 0].text(len(mapped_df) * 0.95, y_pos, tension_labels[i], 
+                    ha='right', va='center', bbox=dict(facecolor='white', alpha=0.7))
+    
+    # 4. Complexity -> Musical structure and melodic variation
+    axs[1, 1].plot(mapped_df.index, mapped_df['complexity'], 'm-')
+    axs[1, 1].set_title('Complexity → Structure & Variation')
+    axs[1, 1].set_ylabel('Complexity Value')
+    axs[1, 1].set_ylim(0, 1)
+    
+    complexity_thresholds = [0.3, 0.7]
+    complexity_labels = ['Simple', 'Moderate', 'Complex']
+    
+    for i in range(len(complexity_thresholds) + 1):
+        if i == 0:
+            y_pos = 0.15
+        elif i == 1:
+            y_pos = 0.5
+        else:
+            y_pos = 0.85
+        
+        axs[1, 1].text(len(mapped_df) * 0.95, y_pos, complexity_labels[i], 
+                    ha='right', va='center', bbox=dict(facecolor='white', alpha=0.7))
+    
+    # Adjust layout and labels
+    for ax in axs.flat:
+        ax.set_xlabel('Time Index')
+        ax.grid(alpha=0.3)
+    
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.9)
+    
+    # Create output directory if needed
+    output_dir = os.path.dirname(output_file)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    
+    # Save the plot
+    plt.savefig(output_file, dpi=dpi)
+    print(f"Musical parameters visualization saved to {output_file}")
+    
+    # Show plot if requested
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+
 def generate_music_from_emotions(
     df: pd.DataFrame,
     output_dir: str = "emotion_music",
@@ -623,17 +1335,18 @@ def generate_music_from_emotions(
     scale: List[int] = None,
     scale_root: int = DEFAULT_SCALE_ROOT,
     feature_mapping: Dict[str, List[str]] = None,
-    chord_mappings: Dict[str, List[Tuple[str, str]]] = None,
+    chord_mappings: Dict[str, List[List[Tuple[str, str]]]] = None,
     phrase_duration: float = DEFAULT_PHRASE_DURATION,
     tempo_range: Tuple[int, int] = DEFAULT_TEMPO_RANGE,
     octave_range: Tuple[int, int] = DEFAULT_OCTAVE_RANGE,
     velocity_range: Tuple[int, int] = DEFAULT_VELOCITY_RANGE,
-    duration_mappings: Dict[str, List[float]] = None,
+    duration_mappings: Dict[str, List[List[float]]] = None,
     visualize: bool = True,
+    visualize_parameters: bool = True,
     normalize: bool = True
 ) -> Dict[str, str]:
     """
-    Generate music and visualization from emotion data.
+    Generate music and visualization from emotion data with enhanced musical variation.
     
     Args:
         df: DataFrame with emotion parameters
@@ -648,7 +1361,8 @@ def generate_music_from_emotions(
         octave_range: Range of octaves for melody (min, max)
         velocity_range: Range of MIDI velocities for dynamics (min, max)
         duration_mappings: Dictionary mapping arousal levels to note durations
-        visualize: Whether to create visualization
+        visualize: Whether to create data visualization
+        visualize_parameters: Whether to create musical parameters visualization
         normalize: Whether to normalize emotion values to 0-1 range
         
     Returns:
@@ -666,7 +1380,7 @@ def generate_music_from_emotions(
     def progress_callback(current, total):
         print(f"Progress: {current}/{total} data points processed ({current/total*100:.1f}%)")
     
-    # Generate visualization
+    # Generate emotion data visualization
     if visualize:
         vis_file = os.path.join(output_dir, "emotion_visualization.png")
         visualize_emotion_data(
@@ -674,7 +1388,17 @@ def generate_music_from_emotions(
             vis_file, 
             feature_mapping=feature_mapping
         )
-        output_files['visualization'] = vis_file
+        output_files['emotion_visualization'] = vis_file
+    
+    # Generate musical parameters visualization
+    if visualize_parameters:
+        params_file = os.path.join(output_dir, "musical_parameters.png")
+        visualize_musical_parameters(
+            df,
+            params_file,
+            feature_mapping=feature_mapping
+        )
+        output_files['musical_parameters'] = params_file
     
     # Generate music
     try:
@@ -697,6 +1421,8 @@ def generate_music_from_emotions(
         output_files['music'] = music_file
     except Exception as e:
         print(f"Error generating music: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Report execution time
     execution_time = time.time() - start_time
@@ -735,109 +1461,180 @@ def create_sample_dataframe(number_of_pts: int = 20) -> pd.DataFrame:
     return pd.DataFrame(sample_data)
 
 
-def example_with_default_settings(df: Optional[pd.DataFrame] = None, output_dir: str = "example_default"):
+def create_dynamic_emotion_dataframe(number_of_pts: int = 30) -> pd.DataFrame:
     """
-    Generate music with default settings.
+    Create a sample dataframe with more dramatic emotional changes.
+    
+    Args:
+        number_of_pts: Number of data points to generate
+        
+    Returns:
+        DataFrame with synthetic emotion parameters featuring dramatic shifts
+    """
+    # Create segments for different emotional states
+    segment_size = number_of_pts // 3
+    
+    # First segment: Tense, anxious (high arousal, low valence)
+    segment1 = {
+        'sentiment_polarity': np.linspace(0.2, 0.3, segment_size),
+        'emotion_anger': np.linspace(0.7, 0.8, segment_size),
+        'emotion_fear': np.linspace(0.6, 0.8, segment_size),
+        'emotion_hope': np.linspace(0.2, 0.3, segment_size),
+        'style_urgency': np.linspace(0.7, 0.9, segment_size),
+        'hostility_confrontation': np.linspace(0.6, 0.8, segment_size),
+        'peace_appeal': np.linspace(0.2, 0.1, segment_size)
+    }
+    
+    # Second segment: Transition (mixed emotions)
+    segment2 = {
+        'sentiment_polarity': np.linspace(0.3, 0.6, segment_size),
+        'emotion_anger': np.linspace(0.8, 0.4, segment_size),
+        'emotion_fear': np.linspace(0.8, 0.4, segment_size),
+        'emotion_hope': np.linspace(0.3, 0.6, segment_size),
+        'style_urgency': np.linspace(0.9, 0.5, segment_size),
+        'hostility_confrontation': np.linspace(0.8, 0.4, segment_size),
+        'peace_appeal': np.linspace(0.1, 0.5, segment_size)
+    }
+    
+    # Third segment: Resolution (high valence, lower arousal)
+    segment3 = {
+        'sentiment_polarity': np.linspace(0.6, 0.9, segment_size),
+        'emotion_anger': np.linspace(0.4, 0.2, segment_size),
+        'emotion_fear': np.linspace(0.4, 0.1, segment_size),
+        'emotion_hope': np.linspace(0.6, 0.9, segment_size),
+        'style_urgency': np.linspace(0.5, 0.3, segment_size),
+        'hostility_confrontation': np.linspace(0.4, 0.1, segment_size),
+        'peace_appeal': np.linspace(0.5, 0.9, segment_size)
+    }
+    
+    # Combine segments
+    combined_data = {}
+    for key in segment1.keys():
+        combined_data[key] = np.concatenate([segment1[key], segment2[key], segment3[key]])
+    
+    # Add some random variation
+    for key in combined_data:
+        noise = np.random.normal(0, 0.05, len(combined_data[key]))
+        combined_data[key] = np.clip(combined_data[key] + noise, 0, 1)
+    
+    return pd.DataFrame(combined_data)
+
+
+def example_with_enhanced_variation(df: Optional[pd.DataFrame] = None, output_dir: str = "example_enhanced"):
+    """
+    Generate music with enhanced melodic and harmonic variation.
     
     Args:
         df: DataFrame with emotion parameters (created if None)
         output_dir: Directory to save output files
     """
     if df is None:
-        df = create_sample_dataframe()
+        df = create_dynamic_emotion_dataframe()
         
     return generate_music_from_emotions(
         df, 
-        output_dir=output_dir
+        output_dir=output_dir,
+        output_filename="enhanced_variation.mid",
+        phrase_duration=3.0  # Shorter phrases for more variation
     )
 
 
-def example_with_custom_scale(
+def example_with_custom_scale_type(
     df: Optional[pd.DataFrame] = None, 
-    output_dir: str = "example_custom_scale",
-    scale: List[int] = [0, 2, 3, 5, 7, 8, 10],  # Natural minor
-    scale_root: int = 2  # D
+    output_dir: str = "example_custom_scale_type",
+    scale_type: str = "lydian",
+    scale_root: int = 5  # F
 ):
     """
-    Generate music with a custom scale.
+    Generate music with a custom scale type.
     
     Args:
         df: DataFrame with emotion parameters (created if None)
         output_dir: Directory to save output files
-        scale: Scale degrees (0-11)
+        scale_type: Scale type from EXTENDED_SCALES
         scale_root: Root note of the scale (0-11, where 0=C, 1=C#, etc.)
     """
     if df is None:
         df = create_sample_dataframe()
+    
+    # Get the scale degrees for the specified type
+    if scale_type in EXTENDED_SCALES:
+        scale = EXTENDED_SCALES[scale_type]
+    else:
+        print(f"Scale type '{scale_type}' not found, using major scale")
+        scale = EXTENDED_SCALES["major"]
         
     return generate_music_from_emotions(
         df, 
         output_dir=output_dir,
         scale=scale,
         scale_root=scale_root,
-        output_filename=f"scale_{scale_root}_music.mid"
+        output_filename=f"{scale_type}_{get_note_name(scale_root)}_music.mid"
     )
 
 
-def example_with_custom_parameters(
-    df: Optional[pd.DataFrame] = None, 
-    output_dir: str = "example_custom_params"
-):
+def example_with_dramatic_emotion_changes(output_dir: str = "example_dramatic"):
     """
-    Generate music with customized musical parameters.
+    Generate music with dramatic emotional changes to showcase the full range
+    of musical variation.
     
     Args:
-        df: DataFrame with emotion parameters (created if None)
         output_dir: Directory to save output files
     """
-    if df is None:
-        df = create_sample_dataframe()
+    # Create a dataframe with dramatic emotional shifts
+    df = create_dynamic_emotion_dataframe(30)
         
     return generate_music_from_emotions(
         df,
         output_dir=output_dir,
-        output_filename="custom_params.mid",
-        phrase_duration=2.0,  # Shorter phrases
-        tempo_range=(80, 140),  # Narrower tempo range
-        octave_range=(4, 6),  # Higher register
-        duration_mappings={
-            'high_arousal': [0.25, 0.25, 0.25, 0.25],  # Very fast notes
-            'medium_arousal': [0.5, 0.25, 0.25, 0.5],  # Medium notes
-            'low_arousal': [1.0, 1.0, 0.5, 0.5]        # Slower notes
-        }
+        output_filename="dramatic_emotions.mid",
+        phrase_duration=4.0,
+        octave_range=(3, 6)  # Wider octave range for more drama
     )
 
 
-def example_with_custom_mapping(
+def example_with_custom_feature_mapping(
     df: Optional[pd.DataFrame] = None, 
-    output_dir: str = "example_custom_mapping"
+    output_dir: str = "example_custom_features"
 ):
     """
-    Generate music with a custom feature mapping.
+    Generate music with a custom feature mapping to showcase how different
+    emotion parameters affect the music.
     
     Args:
         df: DataFrame with emotion parameters (created if None)
         output_dir: Directory to save output files
     """
     if df is None:
-        df = create_sample_dataframe()
+        df = create_dynamic_emotion_dataframe()
     
     # Custom mapping of dataframe columns to musical dimensions
     custom_mapping = {
-        'valence': ['sentiment_polarity'],  # Only use sentiment polarity for valence
-        'arousal': ['emotion_anger', 'style_urgency'],  # Only use anger and urgency
-        'tension': ['hostility_confrontation'],
+        'valence': ['sentiment_polarity', 'emotion_hope'],
+        'arousal': ['emotion_anger', 'style_urgency'],
+        'tension': ['hostility_confrontation', 'emotion_fear'],
         'complexity': ['peace_appeal']  # Map peace to complexity
     }
     
     return generate_music_from_emotions(
         df,
         output_dir=output_dir,
-        output_filename="custom_mapping.mid",
+        output_filename="custom_features.mid",
         feature_mapping=custom_mapping
     )
 
 
-# You can run these from a notebook or script
+# Entry point for running examples
 if __name__ == "__main__":
-    print("Import this module and run the example functions directly.")
+    print("Emotion Music Generator")
+    print("======================")
+    print("1. Running enhanced variation example...")
+    example_with_enhanced_variation()
+    
+    print("\n2. Running dramatic emotion changes example...")
+    example_with_dramatic_emotion_changes()
+    
+    print("\n3. Running custom scale type example (Lydian F)...")
+    example_with_custom_scale_type(scale_type="lydian", scale_root=5)
+    
+    print("\nAll examples completed. Check output directories for generated files.")
