@@ -15,8 +15,11 @@ from typing import Mapping, Sequence, Tuple
 import time
 
 import numpy as np
+
+from sonification.pyo_util import Server
+
 from pyo import (
-    Server, NewTable, TableRec, Mix,
+    NewTable, TableRec, Mix,
     Adsr, Phasor, Biquadx, Sine, Disto, WGVerb, PyoObject
 )
 
