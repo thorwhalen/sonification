@@ -11,7 +11,8 @@ Example usage:
     import soundfile as sf
     sf.write("sonification.wav", waveform, 44100)
 '''
-from typing import Mapping, Sequence, Tuple
+from typing import Tuple
+from collections.abc import Mapping, Sequence
 import time
 
 import numpy as np
@@ -25,8 +26,8 @@ from pyo import (
 
 def scale_value(
     value: float,
-    source_range: Tuple[float, float],
-    target_range: Tuple[float, float],
+    source_range: tuple[float, float],
+    target_range: tuple[float, float],
 ) -> float:
     """
     Scale a value from source range to target range.

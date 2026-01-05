@@ -81,7 +81,8 @@ with suppress(ImportError, ModuleNotFoundError):
     import numpy as np
     import pandas as pd
     from astropy.table import Table
-    from typing import Optional, Dict, Union, Tuple, List, Callable
+    from typing import Optional, Dict, Union, Tuple, List
+    from collections.abc import Callable
     from astronify.series import SoniSeries
     from scipy import signal
     import scipy.io.wavfile
@@ -96,25 +97,25 @@ with suppress(ImportError, ModuleNotFoundError):
 
     def sonify_dataframe_w_astronify(
         df: pd.DataFrame,
-        time_col: Optional[str] = None,
-        pitch_cols: Optional[Union[str, List[str]]] = None,
-        egress: Optional[str] = None,
+        time_col: str | None = None,
+        pitch_cols: str | list[str] | None = None,
+        egress: str | None = None,
         note_spacing: float = 0.01,
         note_duration: float = 0.5,
         gain: float = 0.05,
-        pitch_range: Tuple[float, float] = (100, 10000),
+        pitch_range: tuple[float, float] = (100, 10000),
         center_pitch: float = 440,
-        zero_point: Union[str, float] = "median",
+        zero_point: str | float = "median",
         stretch: str = "linear",
-        minmax_percent: Optional[List[float]] = None,
-        minmax_value: Optional[List[float]] = None,
+        minmax_percent: list[float] | None = None,
+        minmax_value: list[float] | None = None,
         invert: bool = False,
-        custom_mapper: Optional[Callable] = None,
+        custom_mapper: Callable | None = None,
         combine: bool = True,
-        weights: Optional[Dict[str, float]] = None,
+        weights: dict[str, float] | None = None,
         sample_rate: int = 44100,
         waveform_type: str = "sine"
-    ) -> Union[np.ndarray, Dict[str, Dict]]:
+    ) -> np.ndarray | dict[str, dict]:
         """
         Sonify a pandas DataFrame using astronify for pitch mapping and scipy for waveform generation.
         
@@ -427,8 +428,8 @@ with suppress(ImportError, ModuleNotFoundError):
 
 
     def combine_waveforms(
-        sonifications: Dict[str, Dict],
-        weights: Optional[Dict[str, float]] = None
+        sonifications: dict[str, dict],
+        weights: dict[str, float] | None = None
     ) -> np.ndarray:
         """
         Combine multiple sonifications into a single waveform.

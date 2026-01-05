@@ -30,12 +30,10 @@ from typing import (
     Optional,
     Union,
     Tuple,
-    Callable,
     Any,
-    Generator,
     Set,
-    Iterator,
 )
+from collections.abc import Callable, Generator, Iterator
 import time
 import random
 
@@ -102,7 +100,7 @@ def normalize_emotion_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def map_features(
-    df: pd.DataFrame, feature_mapping: Dict[str, List[str]] = None
+    df: pd.DataFrame, feature_mapping: dict[str, list[str]] = None
 ) -> pd.DataFrame:
     """
     Map raw emotion features to musical dimensions (valence, arousal, etc.).
@@ -139,7 +137,7 @@ def map_features(
     return mapped_df
 
 
-def transpose_scale(base_scale: List[int], root: int = 0) -> List[int]:
+def transpose_scale(base_scale: list[int], root: int = 0) -> list[int]:
     """
     Transpose a scale to a new root note.
 
@@ -175,7 +173,7 @@ def get_note_name(pitch_value: int) -> str:
     return note_names[pitch_value % 12]
 
 
-def _parse_note_name(note: str) -> Tuple[str, str]:
+def _parse_note_name(note: str) -> tuple[str, str]:
     """
     Parse a note name to separate the letter name and accidentals.
 
@@ -258,8 +256,8 @@ def note_to_pitch_value(note: str) -> int:
 
 
 def transpose_chord_progression(
-    chord_progression: List[Tuple[str, str]], semitones: int
-) -> List[Tuple[str, str]]:
+    chord_progression: list[tuple[str, str]], semitones: int
+) -> list[tuple[str, str]]:
     """
     Transpose a chord progression by a number of semitones.
 
@@ -288,7 +286,7 @@ def transpose_chord_progression(
 
 def generate_chord_notes(
     root: str, quality: str, inversion: int = 0, base_octave: int = 3
-) -> List[str]:
+) -> list[str]:
     """
     Generate the notes for a chord based on root, quality, and inversion.
 
@@ -602,9 +600,9 @@ def select_chord_progression(
     valence: float,
     tension: float,
     complexity: float,
-    chord_mappings: Dict[str, List[List[Tuple[str, str]]]] = None,
+    chord_mappings: dict[str, list[list[tuple[str, str]]]] = None,
     scale_root: int = 0,
-) -> List[Tuple[str, str]]:
+) -> list[tuple[str, str]]:
     """
     Select an appropriate chord progression based on emotional parameters.
 
@@ -661,13 +659,13 @@ def select_chord_progression(
 
 
 def generate_markov_melody(
-    scale: List[int],
+    scale: list[int],
     num_notes: int,
     valence: float,
     tension: float,
     complexity: float,
     seed_degree: int = None,
-) -> List[int]:
+) -> list[int]:
     """
     Generate a melody using a Markov chain approach based on emotional parameters.
 
@@ -765,8 +763,8 @@ def generate_markov_melody(
 
 
 def generate_contoured_melody(
-    scale: List[int], num_notes: int, valence: float, tension: float, complexity: float
-) -> List[int]:
+    scale: list[int], num_notes: int, valence: float, tension: float, complexity: float
+) -> list[int]:
     """
     Generate a melody with a specific contour based on emotional parameters.
 
@@ -842,8 +840,8 @@ def generate_contoured_melody(
 
 
 def select_duration_pattern(
-    arousal: float, duration_mappings: Dict[str, List[List[float]]] = None
-) -> List[float]:
+    arousal: float, duration_mappings: dict[str, list[list[float]]] = None
+) -> list[float]:
     """
     Select an appropriate note duration pattern based on arousal level.
 
@@ -878,16 +876,16 @@ def select_duration_pattern(
 def create_emotion_music(
     df: pd.DataFrame,
     output_file: str = "emotion_music.mid",
-    scale: List[int] = None,
+    scale: list[int] = None,
     scale_root: int = DEFAULT_SCALE_ROOT,
     force_constant_scale: bool = False,
-    feature_mapping: Dict[str, List[str]] = None,
-    chord_mappings: Dict[str, List[List[Tuple[str, str]]]] = None,
+    feature_mapping: dict[str, list[str]] = None,
+    chord_mappings: dict[str, list[list[tuple[str, str]]]] = None,
     phrase_duration: float = DEFAULT_PHRASE_DURATION,
-    tempo_range: Tuple[int, int] = DEFAULT_TEMPO_RANGE,
-    octave_range: Tuple[int, int] = DEFAULT_OCTAVE_RANGE,
-    velocity_range: Tuple[int, int] = DEFAULT_VELOCITY_RANGE,
-    duration_mappings: Dict[str, List[List[float]]] = None,
+    tempo_range: tuple[int, int] = DEFAULT_TEMPO_RANGE,
+    octave_range: tuple[int, int] = DEFAULT_OCTAVE_RANGE,
+    velocity_range: tuple[int, int] = DEFAULT_VELOCITY_RANGE,
+    duration_mappings: dict[str, list[list[float]]] = None,
     normalize: bool = True,
     use_chord_aware_melody: bool = True,
     progress_callback: Callable[[int, int], None] = None,
@@ -1374,10 +1372,10 @@ def create_emotion_music(
 def visualize_emotion_data(
     df: pd.DataFrame,
     output_file: str = "emotion_visualization.png",
-    feature_mapping: Dict[str, List[str]] = None,
+    feature_mapping: dict[str, list[str]] = None,
     show_plot: bool = False,
     title: str = 'Emotion Parameters Over Time',
-    figsize: Tuple[int, int] = (12, 6),
+    figsize: tuple[int, int] = (12, 6),
     dpi: int = 300,
 ):
     """
@@ -1451,9 +1449,9 @@ def visualize_emotion_data(
 def visualize_musical_parameters(
     df: pd.DataFrame,
     output_file: str = "musical_parameters.png",
-    feature_mapping: Dict[str, List[str]] = None,
+    feature_mapping: dict[str, list[str]] = None,
     show_plot: bool = False,
-    figsize: Tuple[int, int] = (14, 8),
+    figsize: tuple[int, int] = (14, 8),
     dpi: int = 300,
 ):
     """
@@ -1607,21 +1605,21 @@ def generate_music_from_emotions(
     df: pd.DataFrame,
     output_dir: str = "emotion_music",
     output_filename: str = "emotion_music.mid",
-    scale: List[int] = None,
+    scale: list[int] = None,
     scale_root: int = DEFAULT_SCALE_ROOT,
     force_constant_scale: bool = False,
-    feature_mapping: Dict[str, List[str]] = None,
-    chord_mappings: Dict[str, List[List[Tuple[str, str]]]] = None,
+    feature_mapping: dict[str, list[str]] = None,
+    chord_mappings: dict[str, list[list[tuple[str, str]]]] = None,
     phrase_duration: float = DEFAULT_PHRASE_DURATION,
-    tempo_range: Tuple[int, int] = DEFAULT_TEMPO_RANGE,
-    octave_range: Tuple[int, int] = DEFAULT_OCTAVE_RANGE,
-    velocity_range: Tuple[int, int] = DEFAULT_VELOCITY_RANGE,
-    duration_mappings: Dict[str, List[List[float]]] = None,
+    tempo_range: tuple[int, int] = DEFAULT_TEMPO_RANGE,
+    octave_range: tuple[int, int] = DEFAULT_OCTAVE_RANGE,
+    velocity_range: tuple[int, int] = DEFAULT_VELOCITY_RANGE,
+    duration_mappings: dict[str, list[list[float]]] = None,
     visualize: bool = True,
     visualize_parameters: bool = True,
     normalize: bool = True,
     use_chord_aware_melody: bool = True,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Generate music and visualization from emotion data with enhanced musical variation.
 
@@ -1713,15 +1711,15 @@ def generate_music_from_emotions(
 
 
 def generate_chord_aware_melody(
-    scale: List[int],
-    chord_progression: List[Tuple[str, str]],
+    scale: list[int],
+    chord_progression: list[tuple[str, str]],
     num_notes_per_chord: int,
     valence: float,
     tension: float,
     complexity: float,
     phrase_duration: float,
     last_melody_note: int = None,
-) -> Tuple[List[int], List[float]]:
+) -> tuple[list[int], list[float]]:
     """
     Generate a melody that is aware of the chord progression and maintains
     smooth voice leading.
@@ -2047,7 +2045,7 @@ def create_dynamic_emotion_dataframe(number_of_pts: int = 30) -> pd.DataFrame:
 
 
 def example_with_enhanced_variation(
-    df: Optional[pd.DataFrame] = None, output_dir: str = "example_enhanced"
+    df: pd.DataFrame | None = None, output_dir: str = "example_enhanced"
 ):
     """
     Generate music with enhanced melodic and harmonic variation.
@@ -2068,7 +2066,7 @@ def example_with_enhanced_variation(
 
 
 def example_with_custom_scale_type(
-    df: Optional[pd.DataFrame] = None,
+    df: pd.DataFrame | None = None,
     output_dir: str = "example_custom_scale_type",
     scale_type: str = "lydian",
     scale_root: int = 5,  # F
@@ -2122,7 +2120,7 @@ def example_with_dramatic_emotion_changes(output_dir: str = "example_dramatic"):
 
 
 def example_with_custom_feature_mapping(
-    df: Optional[pd.DataFrame] = None, output_dir: str = "example_custom_features"
+    df: pd.DataFrame | None = None, output_dir: str = "example_custom_features"
 ):
     """
     Generate music with a custom feature mapping to showcase how different
@@ -2153,7 +2151,7 @@ def example_with_custom_feature_mapping(
 
 # Add example function for constant scale
 def example_with_constant_scale(
-    df: Optional[pd.DataFrame] = None,
+    df: pd.DataFrame | None = None,
     output_dir: str = "example_constant_scale",
     scale_type: str = "major",
     scale_root: int = 0,  # C
@@ -2193,7 +2191,7 @@ def example_with_constant_scale(
 
 # Example demonstrating chord-aware melodies
 def example_with_chord_aware_melody(
-    df: Optional[pd.DataFrame] = None,
+    df: pd.DataFrame | None = None,
     output_dir: str = "example_chord_aware",
     scale_type: str = "major",
     scale_root: int = 0,  # C
